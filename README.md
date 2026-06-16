@@ -1,36 +1,85 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 🚂 Varanasi Trip Manager
 
-## Getting Started
+A shared trip expense tracker for 5 travelers with Splitwise-inspired debt simplification.
 
-First, run the development server:
+**Travelers:** Aditya Shekhar · Aman Murari · Chotu (Varun) · Ananya Arohi · Ritu Singh
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## Features
+
+- 🏠 **Dashboard** — Total trip cost, per-person spending & net balances
+- ➕ **Add Expense** — Amount, category, who paid, split among whom, notes
+- 📋 **Expense History** — Filter by category or member, view details, delete
+- 💰 **Settlements** — Splitwise-style debt simplification (minimum transactions)
+- 👤 **Member Profiles** — Individual spending breakdown
+- 🔄 **Real-time Sync** — All 5 people can edit from their phones
+
+## Tech Stack
+
+- **Next.js 14** (App Router)
+- **Supabase** (PostgreSQL, free tier)
+- **Vanilla CSS** (Glassmorphism dark theme)
+- **Vercel** (Deployment)
+
+---
+
+## Setup & Deployment
+
+### 1. Create a Supabase Project
+
+1. Go to [supabase.com](https://supabase.com) and sign up (free)
+2. Create a new project
+3. Go to **SQL Editor** and paste the contents of `supabase-setup.sql`
+4. Click **Run** to create the tables
+
+### 2. Get Your Supabase Keys
+
+1. In Supabase, go to **Settings** → **API**
+2. Copy your **Project URL** and **anon/public key**
+
+### 3. Create `.env.local`
+
+Create a `.env.local` file in the project root:
+
+```env
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 4. Run Locally
 
-You can start editing the page by modifying `app/page.js`. The page auto-updates as you edit the file.
+```bash
+npm install
+npm run dev
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### 5. Deploy to Vercel
 
-## Learn More
+1. Push code to GitHub
+2. Go to [vercel.com](https://vercel.com) and import the repository
+3. Add the environment variables:
+   - `NEXT_PUBLIC_SUPABASE_URL`
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+4. Click **Deploy**
 
-To learn more about Next.js, take a look at the following resources:
+> **Note:** Without Supabase credentials, the app works in demo mode using localStorage (data won't sync across devices).
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+---
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## How It Works
 
-## Deploy on Vercel
+### Expense Splitting Algorithm
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Uses a **greedy debt simplification** algorithm (same approach as Splitwise):
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+1. Calculate net balance for each person: `Net = Total Paid - Total Share`
+2. Separate into debtors (negative) and creditors (positive)
+3. Sort both by amount (descending)
+4. Match largest debtor with largest creditor
+5. Settlement amount = min(debt, credit)
+6. Repeat until all settled
+
+This minimizes the number of transactions needed!
+
+### Categories
+
+🍔 Food & Drinks · 🚗 Transport · 🏨 Hotel · 🎟️ Tickets · 🛍️ Shopping · 🎉 Activities · 💊 Medical · 🛒 Groceries · 📦 Other
