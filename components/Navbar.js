@@ -5,9 +5,10 @@ import { usePathname } from 'next/navigation';
 
 const navItems = [
   { href: '/', icon: '🏠', label: 'Home' },
-  { href: '/expenses', icon: '📋', label: 'Expenses' },
+  { href: '/expenses', icon: '🧾', label: 'Spends' },
   { href: '/add', icon: '+', label: 'Add', isFab: true },
-  { href: '/settle', icon: '💰', label: 'Settle' },
+  { href: '/settle', icon: '💸', label: 'Settle' },
+  { href: '/stats', icon: '📊', label: 'Stats' },
 ];
 
 export default function Navbar() {
@@ -21,9 +22,8 @@ export default function Navbar() {
 
           if (item.isFab) {
             return (
-              <Link key={item.href} href={item.href} className="fab" id="nav-add-expense">
+              <Link key={item.href} href={item.href} className="fab" id="nav-add-expense" aria-label="Add expense">
                 <div className="fab__button">+</div>
-                <span className="fab__label">{item.label}</span>
               </Link>
             );
           }

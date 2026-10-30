@@ -1,85 +1,49 @@
-# 🚂 Varanasi Trip Manager
+# 🌊 VARKALA TRIP '26
 
-A shared trip expense tracker for 5 travelers with Splitwise-inspired debt simplification.
+Group trip companion & expense splitter for the Varkala Cliff & Surf trip, in a Coastal Neo-Brutalist style.
 
-**Travelers:** Aditya Shekhar · Aman Murari · Chotu (Varun) · Ananya Arohi · Ritu Singh
+**Squad:** Aditya Shekhar `VK-01` · Divyanshu Singh `VK-02` · Bibek Sundray `VK-03` · Ritu Singh `VK-04` · Vidhi Agrawal `VK-05` · Dibyashree Panda `VK-06` · Kritika Parida `VK-07`
 
 ## Features
 
-- 🏠 **Dashboard** — Total trip cost, per-person spending & net balances
-- ➕ **Add Expense** — Amount, category, who paid, split among whom, notes
-- 📋 **Expense History** — Filter by category or member, view details, delete
-- 💰 **Settlements** — Splitwise-style debt simplification (minimum transactions)
-- 👤 **Member Profiles** — Individual spending breakdown
-- 🔄 **Real-time Sync** — All 5 people can edit from their phones
+- 🔐 **Password login per member.** Pick your name or type your Member ID. The device stays unlocked until you log out.
+- 🪪 **Profile & payment setup.** Upload or paste a profile photo, set a UPI ID, and upload or paste a QR screenshot. If you have a UPI ID but no screenshot, a QR is generated automatically. You can change your password here.
+- 🏠 **Dashboard.** Group total or "my share" billboard, everyone's balance, quick settle, and recent bills.
+- 🧾 **Spends.** Search (description, notes, Member ID), sort, category/member filters, and a perforated receipt view.
+- ➕ **Add/Edit.** Equal, Exact ₹, Percent, and Shares splits, multiple payers, quick-amount chips, and date/time.
+- 💸 **Settle.** Minimum-transfer debt simplification, UPI QR with the amount pre-filled, deep link to UPI apps, mark as settled / undo, and a WhatsApp summary.
+- 📊 **Insights.** Category and daily charts, squad badges, CSV export.
+- 🗺️ **Spots.** Shared Varkala checklist with "Log Expense" shortcuts.
+- 🔄 **Live sync** across phones via Supabase Realtime.
 
-## Tech Stack
+## Default passwords
 
-- **Next.js 14** (App Router)
-- **Supabase** (PostgreSQL, free tier)
-- **Vanilla CSS** (Glassmorphism dark theme)
-- **Vercel** (Deployment)
+`<handle>123`, e.g. `aditya123`, `divyanshu123`, `bibek123`, `ritu123`, `vidhi123`, `dibyashree123`, `kritika123`. Everyone should change theirs in **My Profile → Change Password**.
 
----
+## Setup
 
-## Setup & Deployment
+1. Create a Supabase project (free tier is fine).
+2. In **SQL Editor**, run all of [`supabase-setup.sql`](supabase-setup.sql). It creates `vk_*` tables next to any old Varanasi tables and leaves those untouched. It is safe to re-run.
+3. Create `.env.local`:
+   ```env
+   NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+   ```
+4. `npm install && npm run dev`
+5. Deploy on Vercel with the same two env vars.
 
-### 1. Create a Supabase Project
+> Without Supabase keys the app runs in **demo mode** on `localStorage`: a single device, the same rules, and the same default passwords.
 
-1. Go to [supabase.com](https://supabase.com) and sign up (free)
-2. Create a new project
-3. Go to **SQL Editor** and paste the contents of `supabase-setup.sql`
-4. Click **Run** to create the tables
+## Security model
 
-### 2. Get Your Supabase Keys
+- Passwords are bcrypt-hashed (`pgcrypto`) in `vk_members.password_hash`. The anon key **cannot read** that column (column-level grants). All password and profile writes go through `SECURITY DEFINER` RPCs (`vk_login`, `vk_change_password`, `vk_update_profile`) that check a per-device session token.
+- Changing or resetting a password signs that member out on their other devices.
+- Expenses, settlements, and the checklist stay open to the anon key, as in the original app (a trusted group). Their edit and delete rules are enforced in the UI.
 
-1. In Supabase, go to **Settings** → **API**
-2. Copy your **Project URL** and **anon/public key**
+## Scripts
 
-### 3. Create `.env.local`
-
-Create a `.env.local` file in the project root:
-
-```env
-NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
-```
-
-### 4. Run Locally
-
-```bash
-npm install
-npm run dev
-```
-
-### 5. Deploy to Vercel
-
-1. Push code to GitHub
-2. Go to [vercel.com](https://vercel.com) and import the repository
-3. Add the environment variables:
-   - `NEXT_PUBLIC_SUPABASE_URL`
-   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-4. Click **Deploy**
-
-> **Note:** Without Supabase credentials, the app works in demo mode using localStorage (data won't sync across devices).
-
----
-
-## How It Works
-
-### Expense Splitting Algorithm
-
-Uses a **greedy debt simplification** algorithm (same approach as Splitwise):
-
-1. Calculate net balance for each person: `Net = Total Paid - Total Share`
-2. Separate into debtors (negative) and creditors (positive)
-3. Sort both by amount (descending)
-4. Match largest debtor with largest creditor
-5. Settlement amount = min(debt, credit)
-6. Repeat until all settled
-
-This minimizes the number of transactions needed!
-
-### Categories
-
-🍔 Food & Drinks · 🚗 Transport · 🏨 Hotel · 🎟️ Tickets · 🛍️ Shopping · 🎉 Activities · 💊 Medical · 🛒 Groceries · 📦 Other
+| Command | |
+| --- | --- |
+| `npm run dev` | Dev server |
+| `npm run build` | Production build |
+| `npm run lint` | ESLint (Next.js core-web-vitals) |

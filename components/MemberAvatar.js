@@ -1,21 +1,18 @@
 'use client';
 
-export default function MemberAvatar({ member, size = 'md', style = {} }) {
+/* eslint-disable @next/next/no-img-element -- data-URL avatars */
+export default function MemberAvatar({ member, size = 'md', className = '', style = {} }) {
   if (!member) return null;
-
-  const bgColor = member.color || '#6C63FF';
 
   return (
     <div
-      className={`avatar avatar--${size}`}
-      style={{
-        background: `linear-gradient(135deg, ${bgColor}, ${bgColor}dd)`,
-        color: '#fff',
-        ...style,
-      }}
-      title={member.name}
+      className={`avatar avatar--${size} ${className}`}
+      style={{ background: member.color, ...style }}
+      title={`${member.name} · ${member.id}`}
     >
-      {member.initials}
+      {member.avatarUrl
+        ? <img src={member.avatarUrl} alt={member.name} className="avatar__img" />
+        : member.initials}
     </div>
   );
 }

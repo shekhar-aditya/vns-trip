@@ -1,205 +1,178 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
-import Navbar from '@/components/Navbar';
-import UserSelector from '@/components/UserSelector';
+import AppHeader from '@/components/AppHeader';
 import MemberAvatar from '@/components/MemberAvatar';
-import { MEMBERS, getCurrentUser, getExpenses, getSettlements } from '@/lib/supabase';
+import IdTag from '@/components/IdTag';
+import BalanceStamp from '@/components/BalanceStamp';
+import ExpenseRow from '@/components/ExpenseRow';
+import ReceiptModal from '@/components/ReceiptModal';
+import { useTrip } from '@/components/TripProvider';
 import { getMemberStats, getTotalSpent, simplifyDebts } from '@/lib/algorithm';
-import { getCategoryById } from '@/lib/categories';
+import { isInvolved } from '@/lib/split';
+import { SPOTS } from '@/lib/spots';
+import { inr } from '@/lib/format';
+import { firstName } from '@/lib/members';
 
 export default function HomePage() {
-  const [currentUser, setCurrentUser] = useState(null);
-  const [showUserSelector, setShowUserSelector] = useState(false);
-  const [expenses, setExpenses] = useState([]);
-  const [settlements, setSettlements] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const user = getCurrentUser();
-    if (user) {
-      setCurrentUser(user);
-    } else {
-      setShowUserSelector(true);
-    }
-    loadData();
-  }, []);
-
-  const loadData = async () => {
-    try {
-      const [exp, set] = await Promise.all([getExpenses(), getSettlements()]);
-      setExpenses(exp);
-      setSettlements(set);
-    } catch (err) {
-      console.error('Error loading data:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleUserSelect = (member) => {
-    setCurrentUser(member);
-    setShowUserSelector(false);
-  };
+  const { members, expenses, settlements, spotChecks, loading, loadError, session, openMember, openPayment } = useTrip();
+  const [view, setView] = useState('group');
+  const [receipt, setReceipt] = useState(null);
 
   const totalSpent = getTotalSpent(expenses);
-  const stats = getMemberStats(expenses, settlements);
-  const debts = simplifyDebts(expenses, settlements);
+  const stats = getMemberStats(members, expenses, settlements);
+  const debts = simplifyDebts(members, expenses, settlements);
   const recentExpenses = expenses.slice(0, 5);
-
-  if (loading) {
-    return (
-      <div className="app-container">
-        <div className="loading-spinner" />
-      </div>
-    );
-  }
+  const me = session ? stats[session.memberId] : null;
+  const myCount = session ? expenses.filter(e => isInvolved(e, session.memberId)).length : 0;
+  const myDebts = session ? debts.filter(d => d.from.id === session.memberId || d.to.id === session.memberId) : [];
+  const spotsDone = SPOTS.filter(s => spotChecks[s.id]?.checked).length;
 
   return (
-    <div className="app-container">
-      {showUserSelector && <UserSelector onSelect={handleUserSelect} />}
-
-      {/* Header */}
-      <header className="app-header">
-        <div className="app-header__inner">
-          <span className="app-header__title">🚂 Varanasi Trip</span>
-          {currentUser && (
-            <button
-              className="app-header__user"
-              onClick={() => setShowUserSelector(true)}
-              id="header-user-switch"
-            >
-              <MemberAvatar member={currentUser} size="xs" />
-              <span className="app-header__user-name">{currentUser.name.split(' ')[0]}</span>
-            </button>
-          )}
-        </div>
-      </header>
+    <>
+      <AppHeader title="🌊 VARKALA TRIP '26" />
 
       <div className="page-content">
-        {/* Hero / Total Spent */}
-        <div className="hero animate-in">
-          <div className="hero__label">Total Trip Expense</div>
-          <div className="hero__trip-name">Varanasi 2026 🕉️</div>
-          <div className="hero__amount">₹{totalSpent.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div>
-          <div className="hero__amount-label">{expenses.length} expense{expenses.length !== 1 ? 's' : ''} · {MEMBERS.length} travelers</div>
-        </div>
+        {loadError && <div className="card card--coral banner">⚠ {loadError}</div>}
 
-        {/* Member Balances */}
-        <h3 className="section-title animate-in animate-in--delay-1">👥 Everyone&apos;s Balance</h3>
-        <div className="member-cards">
-          {MEMBERS.map((member, i) => {
-            const memberStats = stats[member.id];
-            const balance = memberStats?.netBalance || 0;
-            const balanceClass = balance > 0.01 ? 'positive' : balance < -0.01 ? 'negative' : 'zero';
-
-            return (
-              <Link href={`/member/${member.id}`} key={member.id}>
-                <div className={`glass-card member-card animate-in animate-in--delay-${i + 1}`}>
-                  <MemberAvatar member={member} size="md" />
-                  <div className="member-card__info">
-                    <div className="member-card__name">{member.name}</div>
-                    <div className="member-card__paid">
-                      Paid ₹{(memberStats?.totalPaid || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
-                    </div>
-                  </div>
-                  <div>
-                    <div className={`member-card__balance member-card__balance--${balanceClass}`}>
-                      {balance > 0.01 ? '+' : ''}₹{Math.abs(balance).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
-                    </div>
-                    <div className="member-card__balance-label">
-                      {balance > 0.01 ? 'gets back' : balance < -0.01 ? 'owes' : 'settled'}
-                    </div>
-                  </div>
-                </div>
-              </Link>
-            );
-          })}
-        </div>
-
-        {/* Quick Settle Summary */}
-        {debts.length > 0 && (
-          <>
-            <h3 className="section-title animate-in">💸 Quick Settle</h3>
-            <div className="member-cards" style={{ marginBottom: 28 }}>
-              {debts.slice(0, 3).map((debt, i) => (
-                <div key={i} className={`glass-card settle-card animate-in animate-in--delay-${i + 1}`}>
-                  <div className="settle-card__row">
-                    <MemberAvatar member={debt.from} size="sm" />
-                    <span style={{ fontSize: '0.82rem', fontWeight: 500 }}>{debt.from.name.split(' ')[0]}</span>
-                    <span className="settle-card__arrow">→</span>
-                    <MemberAvatar member={debt.to} size="sm" />
-                    <span style={{ fontSize: '0.82rem', fontWeight: 500 }}>{debt.to.name.split(' ')[0]}</span>
-                    <span className="settle-card__amount">₹{debt.amount.toLocaleString('en-IN')}</span>
-                  </div>
-                </div>
-              ))}
-              {debts.length > 3 && (
-                <Link href="/settle">
-                  <div className="btn-secondary" style={{ textAlign: 'center' }}>
-                    View all {debts.length} settlements →
-                  </div>
-                </Link>
-              )}
+        {/* Hero billboard */}
+        <section className="billboard">
+          <div className="billboard__top">
+            <span className="billboard__tag">CLIFF & SURF · KERALA</span>
+            <div className="seg seg--sm">
+              <button className={`seg__btn ${view === 'group' ? 'seg__btn--on' : ''}`} onClick={() => setView('group')}>Group Total</button>
+              <button className={`seg__btn ${view === 'me' ? 'seg__btn--on' : ''}`} onClick={() => setView('me')} disabled={!me}>My Share</button>
             </div>
-          </>
+          </div>
+
+          {view === 'group' || !me ? (
+            <>
+              <div className="billboard__label">TOTAL GROUP SPEND</div>
+              <div className="billboard__amount mono">{loading ? '…' : inr(totalSpent)}</div>
+              <div className="billboard__grid">
+                <div><span className="mono">{expenses.length}</span><small>TRANSACTIONS</small></div>
+                <div><span className="mono">{members.length}</span><small>CREW</small></div>
+                <div><span className="mono">{inr(totalSpent / members.length)}</span><small>₹ / PERSON</small></div>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="billboard__label">MY SHARE OF THE TRIP</div>
+              <div className="billboard__amount mono">{inr(me.totalShare)}</div>
+              <div className="billboard__grid">
+                <div><span className="mono">{inr(me.totalPaid)}</span><small>I PAID</small></div>
+                <div><span className="mono">{myCount}</span><small>INVOLVED IN</small></div>
+                <div><BalanceStamp amount={me.netBalance} size="sm" /></div>
+              </div>
+            </>
+          )}
+        </section>
+
+        {/* My pending transfers */}
+        {myDebts.length > 0 && (
+          <section className="section">
+            <h3 className="section-title">⚡ Your Pending Transfers</h3>
+            <div className="stack">
+              {myDebts.map(d => (
+                <TransferMini key={`${d.from.id}-${d.to.id}`} debt={d} onPay={() => openPayment(d)} />
+              ))}
+            </div>
+          </section>
         )}
 
-        {/* Recent Expenses */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-          <h3 className="section-title" style={{ marginBottom: 0 }}>📝 Recent Expenses</h3>
-          {expenses.length > 5 && (
-            <Link href="/expenses" style={{ fontSize: '0.78rem', color: 'var(--accent-primary)', fontWeight: 500 }}>
-              View all →
-            </Link>
-          )}
-        </div>
-
-        {recentExpenses.length > 0 ? (
-          <div className="member-cards">
-            {recentExpenses.map((expense, i) => {
-              const category = getCategoryById(expense.category);
-              const payer = MEMBERS.find(m => m.id === expense.paid_by);
-              const splitCount = expense.split_among?.length || 0;
-
+        {/* Balance ledger */}
+        <section className="section">
+          <h3 className="section-title">👥 Everyone&apos;s Balance</h3>
+          <div className="stack">
+            {members.map(member => {
+              const s = stats[member.id];
               return (
-                <div key={expense.id} className={`glass-card expense-card animate-in animate-in--delay-${Math.min(i + 1, 5)}`}>
-                  <div className="expense-card__icon" style={{ background: `${category.color}20`, color: category.color }}>
-                    {category.icon}
-                  </div>
-                  <div className="expense-card__info">
-                    <div className="expense-card__desc">{expense.description || category.label}</div>
-                    <div className="expense-card__meta">
-                      {payer && <MemberAvatar member={payer} size="xs" />}
-                      <span>{payer?.name.split(' ')[0]} paid</span>
-                      <span>·</span>
-                      <span>{new Date(expense.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</span>
+                <button key={member.id} className="card ledger-row" onClick={() => openMember(member.id)}>
+                  <MemberAvatar member={member} size="md" />
+                  <div className="ledger-row__info">
+                    <div className="ledger-row__name">
+                      {member.name}
+                      {member.id === session?.memberId && <span className="you-tag">YOU</span>}
+                    </div>
+                    <div className="ledger-row__meta">
+                      <IdTag id={member.id} />
+                      <span className="mono">paid {inr(s.totalPaid)}</span>
                     </div>
                   </div>
-                  <div>
-                    <div className="expense-card__amount">₹{parseFloat(expense.amount).toLocaleString('en-IN')}</div>
-                    <div className="expense-card__split-info">÷ {splitCount}</div>
-                  </div>
-                </div>
+                  <BalanceStamp amount={s.netBalance} size="sm" />
+                </button>
               );
             })}
           </div>
-        ) : (
-          <div className="glass-card glass-card--no-hover empty-state animate-in">
-            <div className="empty-state__icon">🧳</div>
-            <div className="empty-state__title">No expenses yet</div>
-            <div className="empty-state__desc">Start by adding your first expense for the trip!</div>
-            <Link href="/add">
-              <button className="btn-primary" style={{ maxWidth: 220, margin: '20px auto 0' }}>
-                + Add Expense
-              </button>
-            </Link>
-          </div>
+        </section>
+
+        {/* Quick settle */}
+        {debts.length > 0 && (
+          <section className="section">
+            <div className="section-head">
+              <h3 className="section-title">💸 Quick Settle</h3>
+              <Link href="/settle" className="link-arrow">All {debts.length} →</Link>
+            </div>
+            <div className="stack">
+              {debts.slice(0, 3).map(d => (
+                <TransferMini key={`${d.from.id}-${d.to.id}`} debt={d} onPay={() => openPayment(d)} />
+              ))}
+            </div>
+          </section>
         )}
+
+        {/* Spots teaser */}
+        <Link href="/spots" className="card card--cyan spots-teaser">
+          <span className="spots-teaser__icon">🗺️</span>
+          <div>
+            <div className="spots-teaser__title">VARKALA SPOT CHECKLIST</div>
+            <div className="mono">{spotsDone}/{SPOTS.length} spots ticked off</div>
+          </div>
+          <span className="spots-teaser__go">→</span>
+        </Link>
+
+        {/* Recent expenses */}
+        <section className="section">
+          <div className="section-head">
+            <h3 className="section-title">📝 Recent Expenses</h3>
+            {expenses.length > 5 && <Link href="/expenses" className="link-arrow">View all →</Link>}
+          </div>
+
+          {loading ? (
+            <div className="loading-block">LOADING…</div>
+          ) : recentExpenses.length > 0 ? (
+            <div className="stack">
+              {recentExpenses.map(e => (
+                <ExpenseRow key={e.id} expense={e} onClick={() => setReceipt(e)} highlightId={session?.memberId} />
+              ))}
+            </div>
+          ) : (
+            <div className="card empty-state">
+              <div className="empty-state__icon">🏖️</div>
+              <div className="empty-state__title">No expenses yet</div>
+              <div className="empty-state__desc">Log the first chai on the cliff!</div>
+              <Link href="/add" className="btn btn--primary" style={{ marginTop: 16 }}>+ Add Expense</Link>
+            </div>
+          )}
+        </section>
       </div>
 
-      <Navbar />
+      {receipt && <ReceiptModal expense={receipt} onClose={() => setReceipt(null)} />}
+    </>
+  );
+}
+
+function TransferMini({ debt, onPay }) {
+  return (
+    <div className="card transfer-mini">
+      <MemberAvatar member={debt.from} size="sm" />
+      <span className="transfer-mini__name">{firstName(debt.from)}</span>
+      <span className="transfer-mini__arrow">➔</span>
+      <MemberAvatar member={debt.to} size="sm" />
+      <span className="transfer-mini__name">{firstName(debt.to)}</span>
+      <span className="transfer-mini__amount mono">{inr(debt.amount)}</span>
+      <button className="btn btn--primary btn--sm" onClick={onPay} aria-label={`Pay ${debt.to.name}`}>📲</button>
     </div>
   );
 }
