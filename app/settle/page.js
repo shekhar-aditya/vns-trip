@@ -6,16 +6,23 @@ import MemberAvatar from '@/components/MemberAvatar';
 import IdTag from '@/components/IdTag';
 import { useTrip } from '@/components/TripProvider';
 import { addSettlement, deleteSettlement } from '@/lib/store';
-import { simplifyDebts, getTotalSpent } from '@/lib/algorithm';
+import { getTotalSpent, pairBalance, pairwiseDebts, pairwiseLedger, paymentHistory } from '@/lib/algorithm';
 import { canRecordSettlement } from '@/lib/permissions';
-import { copyText, dateTime, inr } from '@/lib/format';
+import { balanceText, copyText, dateTime, inr } from '@/lib/format';
 import { firstName } from '@/lib/members';
 
 export default function SettlePage() {
-  const { members, membersById, expenses, settlements, loading, session, refresh, toast, openPayment } = useTrip();
+  const { members, membersById, expenses, settlements, loading, session, currentUser, refresh, toast, openPayment } = useTrip();
   const [busyKey, setBusyKey] = useState(null);
 
-  const debts = simplifyDebts(members, expenses, settlements);
+  const debts = pairwiseDebts(members, expenses, settlements);
+  const ledger = pairwiseLedger(expenses, settlements);
+  const myHistory = session ? paymentHistory(session.memberId, expenses, settlements) : [];
+
+  const payMember = to => {
+    const owed = pairBalance(ledger, currentUser.id, to.id);
+    openPayment({ from: currentUser, to, amount: Math.max(owed, 0) });
+  };
 
   const quickSettle = async debt => {
     if (!confirm(`Record that ${debt.from.name} paid ${debt.to.name} ${inr(debt.amount, 2)}?`)) return;
@@ -143,6 +150,65 @@ export default function SettlePage() {
             <button className="btn btn--whatsapp btn--block" onClick={copyWhatsApp} style={{ marginTop: 20 }}>
               📲 Copy WhatsApp Summary
             </button>
+
+            {currentUser && (
+              <section className="section">
+                <h3 className="section-title">💳 Record a Payment</h3>
+                <div className="card">
+                  <div className="hint" style={{ marginTop: 0 }}>
+                    Paid someone any amount — full, partial or extra? Pick who you paid.
+                  </div>
+                  <div className="chip-row">
+                    {members.filter(m => m.id !== currentUser.id).map(m => (
+                      <button key={m.id} className="member-chip" onClick={() => payMember(m)}>
+                        <MemberAvatar member={m} size="xs" />
+                        {firstName(m)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </section>
+            )}
+
+            {currentUser && (
+              <section className="section">
+                <h3 className="section-title">🧾 My Payments</h3>
+                {myHistory.length > 0 ? (
+                  <div className="card history">
+                    {myHistory.map(s => {
+                      const payer = membersById[s.paid_by];
+                      const receiver = membersById[s.paid_to];
+                      const sent = s.paid_by === currentUser.id;
+                      return (
+                        <div key={s.id} className="history__item">
+                          <div className="history__avatars">
+                            <MemberAvatar member={payer} size="xs" />
+                            <span>➔</span>
+                            <MemberAvatar member={receiver} size="xs" />
+                          </div>
+                          <div className="history__info">
+                            <div className="history__text">
+                              {sent ? `You paid ${firstName(receiver)}` : `${firstName(payer)} paid you`}
+                            </div>
+                            <div className="history__date mono">
+                              {dateTime(s.created_at)}{s.note ? ` · ${s.note}` : ''}
+                            </div>
+                            <div className="history__date mono" style={{ whiteSpace: 'normal' }}>
+                              Then: {balanceText(s.balanceAfter, payer, receiver)}
+                            </div>
+                          </div>
+                          <div className={`history__amount mono ${sent ? 'neg' : 'pos'}`}>
+                            {sent ? '−' : '+'}{inr(s.amount, 2)}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="card hint" style={{ margin: 0 }}>No payments made or received yet.</div>
+                )}
+              </section>
+            )}
 
             {settlements.length > 0 && (
               <section className="section">

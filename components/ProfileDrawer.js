@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Modal from './Modal';
 import MemberAvatar from './MemberAvatar';
 import IdTag from './IdTag';
@@ -9,7 +9,7 @@ import { useTrip } from './TripProvider';
 import * as store from '@/lib/store';
 import { compressImage, imageFromClipboard } from '@/lib/image';
 import { isValidUpi } from '@/lib/upi';
-import { canEditProfile } from '@/lib/permissions';
+import { canEditProfile, canResetTrip } from '@/lib/permissions';
 import { copyText, downloadFile } from '@/lib/format';
 import { firstName } from '@/lib/members';
 
@@ -52,6 +52,7 @@ export default function ProfileDrawer({ targetId, onTargetChange, onClose }) {
       />
 
       {isSelf && session.isAdmin && <TripDataControls session={session} refresh={refresh} toast={toast} />}
+      {isSelf && canResetTrip(session) && <ResetTripControls session={session} refresh={refresh} toast={toast} />}
 
       {isSelf && (
         <section className="drawer-section drawer-actions">
@@ -341,6 +342,70 @@ function TripDataControls({ session, refresh, toast }) {
       </div>
       <input ref={fileInput} type="file" accept="application/json,.json" hidden
         onChange={e => { restore(e.target.files?.[0]); e.target.value = ''; }} />
+    </section>
+  );
+}
+
+const RESET_WARNINGS = 3;
+const RESET_COUNTDOWN = 5;
+
+/** Wipe all expenses & payments: 3 sequential warnings, then a 5s locked confirm. */
+function ResetTripControls({ session, refresh, toast }) {
+  const [step, setStep] = useState(0); // 0 = idle, 1..3 = warning shown
+  const [seconds, setSeconds] = useState(RESET_COUNTDOWN);
+  const [busy, setBusy] = useState(false);
+  const finalStep = step === RESET_WARNINGS;
+
+  useEffect(() => {
+    if (!finalStep || seconds <= 0) return;
+    const t = setTimeout(() => setSeconds(s => s - 1), 1000);
+    return () => clearTimeout(t);
+  }, [finalStep, seconds]);
+
+  const next = () => {
+    if (step + 1 === RESET_WARNINGS) setSeconds(RESET_COUNTDOWN);
+    setStep(step + 1);
+  };
+
+  const reset = async () => {
+    setBusy(true);
+    try {
+      await store.resetTrip(session);
+      await refresh();
+      toast('🧹 Trip reset · all balances ₹0');
+      setStep(0);
+    } catch (err) {
+      console.error(err);
+      toast(err.message || 'Reset failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="drawer-section">
+      <h3 className="drawer-section__title">⚠️ Danger Zone</h3>
+      {step === 0 ? (
+        <button className="btn btn--danger btn--block" onClick={next}>🧹 Reset Entire Trip</button>
+      ) : (
+        <>
+          <div className="form-error" style={{ marginTop: 0 }}>
+            Warning {step} of {RESET_WARNINGS}: Are you sure you want to delete all trip data?
+            <br />
+            <small>All expenses and recorded payments will be wiped. Member profiles stay.</small>
+          </div>
+          <div className="btn-row" style={{ marginTop: 12 }}>
+            <button className="btn btn--ghost" onClick={() => setStep(0)} disabled={busy}>Cancel</button>
+            {finalStep ? (
+              <button className="btn btn--danger" onClick={reset} disabled={busy || seconds > 0}>
+                {busy ? 'Resetting…' : seconds > 0 ? `Wait ${seconds}s…` : 'Yes, reset everything'}
+              </button>
+            ) : (
+              <button className="btn btn--danger" onClick={next}>Yes, continue</button>
+            )}
+          </div>
+        </>
+      )}
     </section>
   );
 }

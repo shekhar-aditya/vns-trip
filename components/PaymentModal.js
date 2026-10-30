@@ -7,41 +7,48 @@ import IdTag from './IdTag';
 import UpiQr from './UpiQr';
 import { useTrip } from './TripProvider';
 import { addSettlement } from '@/lib/store';
+import { pairBalance, pairwiseLedger } from '@/lib/algorithm';
 import { buildUpiLink, isValidUpi } from '@/lib/upi';
 import { canRecordSettlement } from '@/lib/permissions';
-import { copyText, inr } from '@/lib/format';
+import { balanceText, copyText, inr } from '@/lib/format';
 import { firstName } from '@/lib/members';
 
 const NOTE = 'Varkala Trip Settlement';
 
+/** Pay `debt.to` any amount — exact, partial or more than owed. */
 export default function PaymentModal({ debt, onClose }) {
-  const { membersById, session, refresh, toast } = useTrip();
+  const { membersById, expenses, settlements, session, refresh, toast } = useTrip();
   // Use live member records so freshly uploaded QR/UPI show up
   const from = membersById[debt.from.id] || debt.from;
   const to = membersById[debt.to.id] || debt.to;
   const hasUpi = isValidUpi(to.upiId);
   const [qrMode, setQrMode] = useState(hasUpi ? 'generated' : 'uploaded');
+  const [amountInput, setAmountInput] = useState(debt.amount > 0 ? String(debt.amount) : '');
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
 
   const canSettle = canRecordSettlement(session, from.id, to.id);
+  const owed = pairBalance(pairwiseLedger(expenses, settlements), from.id, to.id);
+  const amount = Math.round((parseFloat(amountInput) || 0) * 100) / 100;
+  const after = Math.round((owed - amount) * 100) / 100;
 
-  const markSettled = async () => {
+  const recordPayment = async () => {
+    if (amount <= 0) return;
     setSaving(true);
     try {
       await addSettlement({
         paid_by: from.id,
         paid_to: to.id,
-        amount: debt.amount,
+        amount,
         note: note || `${firstName(from)} → ${firstName(to)}`,
         created_by: session.memberId,
       });
       await refresh();
-      toast(`✓ ${inr(debt.amount, 2)} marked settled`);
+      toast(`✓ ${inr(amount, 2)} recorded · ${balanceText(after, from, to)}`);
       onClose();
     } catch (err) {
       console.error(err);
-      toast('Could not record settlement');
+      toast('Could not record payment');
     } finally {
       setSaving(false);
     }
@@ -56,7 +63,7 @@ export default function PaymentModal({ debt, onClose }) {
         </div>
         <div className="pass-strip__mid">
           <span className="pass-strip__arrow">➔</span>
-          <span className="pass-strip__amount mono">{inr(debt.amount, 2)}</span>
+          <span className="pass-strip__amount mono">{inr(amount, 2)}</span>
         </div>
         <div className="pass-strip__end">
           <MemberAvatar member={to} size="sm" />
@@ -65,6 +72,29 @@ export default function PaymentModal({ debt, onClose }) {
       </div>
 
       <div className="pay-to">Pay <strong>{to.name}</strong></div>
+      <div className="hint" style={{ textAlign: 'center' }}>Right now: {balanceText(owed, from, to)}</div>
+
+      <label className="form-label" htmlFor="pay-amount">Amount paying (₹)</label>
+      <input
+        id="pay-amount"
+        className="text-input mono"
+        type="number"
+        inputMode="decimal"
+        min="0"
+        step="0.01"
+        placeholder="0"
+        value={amountInput}
+        onChange={e => setAmountInput(e.target.value)}
+      />
+      {amount > 0 && (
+        <div className="hint">
+          After this: {Math.abs(after) < 0.01
+            ? 'settled ✓ ₹0'
+            : after > 0
+              ? `${inr(after, 2)} remaining to pay`
+              : `${firstName(to)} will owe ${firstName(from)} ${inr(-after, 2)}`}
+        </div>
+      )}
 
       {to.qrCodeUrl && hasUpi && (
         <div className="seg seg--sm">
@@ -74,7 +104,7 @@ export default function PaymentModal({ debt, onClose }) {
       )}
 
       <div className="qr-preview qr-preview--bright">
-        <UpiQr member={to} amount={debt.amount} note={NOTE} prefer={qrMode} size={250} />
+        <UpiQr member={to} amount={amount || undefined} note={NOTE} prefer={qrMode} size={250} />
       </div>
 
       {to.upiId ? (
@@ -91,19 +121,19 @@ export default function PaymentModal({ debt, onClose }) {
       )}
 
       <div className="btn-stack">
-        {hasUpi && (
+        {hasUpi && amount > 0 && (
           <a
             className="btn btn--primary btn--block btn--lg"
-            href={buildUpiLink({ upiId: to.upiId, name: to.name, amount: debt.amount, note: NOTE })}
+            href={buildUpiLink({ upiId: to.upiId, name: to.name, amount, note: NOTE })}
           >
-            ⚡ Open UPI App ({inr(debt.amount, 2)})
+            ⚡ Open UPI App ({inr(amount, 2)})
           </a>
         )}
         {canSettle && (
           <>
             <input className="text-input" placeholder="Note (optional) e.g. Paid via GPay" value={note} onChange={e => setNote(e.target.value)} />
-            <button className="btn btn--mint btn--block" onClick={markSettled} disabled={saving}>
-              {saving ? 'Recording…' : '✓ Mark as Settled'}
+            <button className="btn btn--mint btn--block" onClick={recordPayment} disabled={saving || amount <= 0}>
+              {saving ? 'Recording…' : `✓ Record ${inr(amount, 2)} Payment`}
             </button>
           </>
         )}

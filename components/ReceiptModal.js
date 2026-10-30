@@ -9,7 +9,7 @@ import { useTrip } from './TripProvider';
 import { deleteExpense } from '@/lib/store';
 import { getCategoryById } from '@/lib/categories';
 import { getExpensePayers, getExpenseSplits, SPLIT_MODES } from '@/lib/split';
-import { canEditExpense } from '@/lib/permissions';
+import { canDeleteExpense, canEditExpense } from '@/lib/permissions';
 import { expenseDate, inr, longDateTime, dateTime } from '@/lib/format';
 
 export default function ReceiptModal({ expense, onClose }) {
@@ -22,14 +22,15 @@ export default function ReceiptModal({ expense, onClose }) {
   const mode = SPLIT_MODES.find(m => m.id === (expense.split_mode || 'equal'));
   const creator = membersById[expense.created_by];
   const editable = canEditExpense(session, expense);
+  const deletable = canDeleteExpense(session, expense);
 
   const handleDelete = async () => {
-    if (!confirm(`Delete "${expense.description}" (${inr(expense.amount, 2)})?`)) return;
+    if (!confirm(`Delete "${expense.description}" (${inr(expense.amount, 2)})? Everyone's split of it is reversed.`)) return;
     setDeleting(true);
     try {
       await deleteExpense(expense.id);
       await refresh();
-      toast('🗑️ Expense deleted');
+      toast('🗑️ Expense deleted · balances updated');
       onClose();
     } catch (err) {
       console.error(err);
@@ -97,12 +98,14 @@ export default function ReceiptModal({ expense, onClose }) {
         </div>
       </div>
 
-      {editable && (
+      {(editable || deletable) && (
         <div className="btn-row">
-          <Link className="btn btn--cyan" href={`/add?edit=${expense.id}`} onClick={onClose}>✏️ Edit</Link>
-          <button className="btn btn--danger" onClick={handleDelete} disabled={deleting}>
-            {deleting ? 'Deleting…' : '🗑️ Delete'}
-          </button>
+          {editable && <Link className="btn btn--cyan" href={`/add?edit=${expense.id}`} onClick={onClose}>✏️ Edit</Link>}
+          {deletable && (
+            <button className="btn btn--danger" onClick={handleDelete} disabled={deleting}>
+              {deleting ? 'Deleting…' : '🗑️ Delete'}
+            </button>
+          )}
         </div>
       )}
     </Modal>

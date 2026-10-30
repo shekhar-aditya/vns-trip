@@ -9,7 +9,7 @@ import BalanceStamp from '@/components/BalanceStamp';
 import ExpenseRow from '@/components/ExpenseRow';
 import ReceiptModal from '@/components/ReceiptModal';
 import { useTrip } from '@/components/TripProvider';
-import { getMemberStats, getTotalSpent, simplifyDebts } from '@/lib/algorithm';
+import { getMemberStats, getTotalSpent, pairwiseDebts } from '@/lib/algorithm';
 import { isInvolved } from '@/lib/split';
 import { SPOTS } from '@/lib/spots';
 import { inr } from '@/lib/format';
@@ -22,7 +22,7 @@ export default function HomePage() {
 
   const totalSpent = getTotalSpent(expenses);
   const stats = getMemberStats(members, expenses, settlements);
-  const debts = simplifyDebts(members, expenses, settlements);
+  const debts = pairwiseDebts(members, expenses, settlements);
   const recentExpenses = expenses.slice(0, 5);
   const me = session ? stats[session.memberId] : null;
   const myCount = session ? expenses.filter(e => isInvolved(e, session.memberId)).length : 0;
